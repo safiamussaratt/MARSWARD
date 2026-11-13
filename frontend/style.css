@@ -430,3 +430,133 @@ body {
 .route-stat strong {
     color: #efa47d;
 }
+
+
+/* MARSWARD terrain analysis additions */
+
+.layer-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+    margin-top: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    cursor: pointer;
+}
+
+.layer-toggle input {
+    margin-top: 3px;
+    accent-color: #e58a56;
+}
+
+.layer-toggle span {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.layer-toggle strong {
+    font-size: 12px;
+    color: #e7e3df;
+}
+
+.layer-toggle small {
+    font-size: 10px;
+    color: #999;
+    line-height: 1.4;
+}
+
+.hazard-legend {
+    margin-top: 14px;
+    padding: 12px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.hazard-legend p {
+    margin: 0 0 10px;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: #999;
+}
+
+.hazard-legend div {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 8px 0;
+    font-size: 11px;
+    color: #d2d0cd;
+}
+
+.legend-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.legend-swatch.gentle {
+    background: #2ecc71;
+}
+
+.legend-swatch.moderate {
+    background: #f1c40f;
+}
+
+.legend-swatch.steep {
+    background: #e67e22;
+}
+
+.legend-swatch.very-steep {
+    background: #e74c3c;
+}
+
+.terrain-card {
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.terrain-card p {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.6;
+    color: #aaa;
+}
+
+.terrain-reading {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 9px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.terrain-reading:last-of-type {
+    border-bottom: none;
+}
+
+.terrain-reading small {
+    font-size: 9px;
+    letter-spacing: 0.8px;
+    color: #999;
+}
+
+.terrain-reading strong {
+    font-size: 13px;
+    color: #e9a174;
+    overflow-wrap: anywhere;
+}
+
+.terrain-coordinate {
+    display: block;
+    margin-top: 10px;
+    font-size: 10px;
+    line-height: 1.5;
+    color: #999;
+}
