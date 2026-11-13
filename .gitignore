@@ -1,0 +1,17 @@
+
+# Python virtual environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Environment variables and secrets
+.env
+
+# Large NASA MOLA raster (download separately)
+data/terrain/*.img
+
+# Generated terrain arrays
+results/terrain/*.npy

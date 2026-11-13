@@ -1,0 +1,62 @@
+{
+    "dataset": "NASA MGS MOLA MEGDR",
+    "region": {
+        "west": 74.0,
+        "east": 81.0,
+        "south": 16.0,
+        "north": 21.0
+    },
+    "raster_shape": [
+        320,
+        448
+    ],
+    "elevation_statistics": {
+        "minimum": -4403.0,
+        "maximum": 1654.0,
+        "mean": -1970.432861328125,
+        "median": -2000.0,
+        "shape": [
+            320,
+            448
+        ],
+        "zero_value_count": 53
+    },
+    "slope_statistics": {
+        "minimum": 0.0,
+        "maximum": 37.54879379272461,
+        "mean": 2.7386315413090156,
+        "median": 1.6503849029541016,
+        "percentile_75": 3.4963536858558655,
+        "percentile_90": 6.494936180114747,
+        "percentile_95": 9.092222309112547
+    },
+    "hazard_summary": {
+        "total_pixels": 143360,
+        "valid_pixels": 143360,
+        "unknown_pixels": 0,
+        "categories": {
+            "Gentle": {
+                "count": 121299,
+                "percentage": 84.61
+            },
+            "Moderate": {
+                "count": 20567,
+                "percentage": 14.35
+            },
+            "Steep": {
+                "count": 1437,
+                "percentage": 1.0
+            },
+            "Very Steep": {
+                "count": 57,
+                "percentage": 0.04
+            }
+        }
+    },
+    "classification_thresholds_degrees": {
+        "gentle_max": 5,
+        "moderate_max": 15,
+        "steep_max": 25
+    },
+    "classification_note": "Prototype slope categories. Thresholds are not validated astronaut or rover safety limits."
+}

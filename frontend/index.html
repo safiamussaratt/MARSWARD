@@ -1,0 +1,204 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>MARSWARD | Mission Control</title>
+
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/ol@10.6.1/ol.css">
+
+    <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+
+<div class="app-container">
+
+    <header class="topbar">
+        <div class="brand">
+            <span class="brand-icon">M</span>
+            <div>
+                <h2>MARSWARD</h2>
+                <small>PLANETARY EXPLORATION SYSTEM</small>
+            </div>
+        </div>
+
+        <div class="mission-label">
+            <span class="live-dot"></span>
+            MISSION CONTROL ONLINE
+        </div>
+
+        <div class="mission-name">
+            MISSION: JEZERO EXPLORATION
+        </div>
+    </header>
+
+    <main class="dashboard">
+
+        <aside class="sidebar">
+
+            <p class="section-label">NAVIGATION</p>
+
+            <div class="nav-item active">◉ Martian Explorer</div>
+            <div class="nav-item">⌖ Route Planner</div>
+            <div class="nav-item">⚠ Hazard Analysis</div>
+            <div class="nav-item">♧ Survival Simulator</div>
+            <div class="nav-item">✧ Science Explorer</div>
+
+            <div class="sidebar-divider"></div>
+
+            <p class="section-label">MAP LAYERS</p>
+
+            <div class="layer-card selected">
+                <span class="layer-dot"></span>
+                <div>
+                    <strong>MOLA Hillshade</strong>
+                    <small>NASA Global Terrain</small>
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <p class="section-label">MISSION LOCATION</p>
+
+            <div class="location-card">
+                <strong>Jezero Crater</strong>
+                <small>18.4° N, 77.7° E</small>
+                <small>Mars · Northern Hemisphere</small>
+            </div>
+
+            <button id="reset-map" class="secondary-button">
+                Reset Map View
+            </button>
+
+        </aside>
+
+        <section class="map-section">
+
+            <div class="map-heading">
+                <div>
+                    <h3>Martian Surface Explorer</h3>
+                    <p>Explore NASA planetary terrain data</p>
+                </div>
+
+                <span class="data-tag">NASA / MOLA</span>
+            </div>
+
+<div class="route-controls">
+
+    <div class="coordinate-input">
+        <label for="start-lon">START LONGITUDE</label>
+        <input id="start-lon" type="number"
+               step="0.0001" value="77.2">
+    </div>
+
+    <div class="coordinate-input">
+        <label for="start-lat">START LATITUDE</label>
+        <input id="start-lat" type="number"
+               step="0.0001" value="18.2">
+    </div>
+
+    <div class="coordinate-input">
+        <label for="end-lon">DESTINATION LONGITUDE</label>
+        <input id="end-lon" type="number"
+               step="0.0001" value="78.3">
+    </div>
+
+    <div class="coordinate-input">
+        <label for="end-lat">DESTINATION LATITUDE</label>
+        <input id="end-lat" type="number"
+               step="0.0001" value="18.8">
+    </div>
+
+    <button id="generate-route">
+        Calculate Safe Route
+    </button>
+
+</div>
+
+<div id="route-results">
+    Enter your coordinates and calculate a route.
+</div>
+
+
+            <div id="map"></div>
+
+            <div class="map-footer">
+                <span>DATA SOURCE: NASA MARS TREK</span>
+                <span id="map-coordinates">LAT: -- | LON: --</span>
+            </div>
+
+        </section>
+
+        <aside class="info-panel">
+
+            <p class="section-label">MISSION OVERVIEW</p>
+
+            <div class="overview-card">
+                <small>SELECTED REGION</small>
+                <h2>Jezero Crater</h2>
+                <p>Perseverance Exploration Region</p>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <p class="section-label">SELECTED LOCATION</p>
+
+            <div class="info-card">
+                <small>LATITUDE</small>
+                <strong id="latitude">18.4000° N</strong>
+            </div>
+
+            <div class="info-card">
+                <small>LONGITUDE</small>
+                <strong id="longitude">77.7000° E</strong>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <p class="section-label">SYSTEM STATUS</p>
+
+            <div class="status-row">
+                <span>Backend</span>
+                <span class="status-online" id="backend-status">
+                    CONNECTING
+                </span>
+            </div>
+
+            <div class="status-row">
+                <span>NASA Map Data</span>
+                <span class="status-online" id="map-status">
+                    LOADING
+                </span>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <div class="notice">
+                <strong>MISSION NOTE</strong>
+                <p>
+                    Select a location on the map to inspect its
+                    coordinates. Terrain-based route analysis
+                    will be available in the next module.
+                </p>
+            </div>
+
+        </aside>
+
+    </main>
+
+    <footer class="bottom-bar">
+        <span>MARSWARD v1.0</span>
+        <span>PLANETARY DATA EXPLORATION</span>
+        <span>FOR MISSION PLANNING & RESEARCH</span>
+    </footer>
+
+</div>
+
+<script type="module" src="/script.js"></script>
+
+</body>
+</html>
