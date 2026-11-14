@@ -4,6 +4,7 @@ import binascii
 
 import numpy as np
 
+from backend.mars_data import pixel_size_meters
 from backend.terrain_processor import analyze_jezero
 from backend.hazard_analyzer import (
     analyze_hazards,
@@ -206,25 +207,12 @@ def _png_chunk(chunk_type, data):
     )
 
 
-def create_hazard_png():
+def _rgba_to_png(rgba):
     """
-    Convert the hazard classification raster into
-    a transparent RGBA PNG image.
+    Encode an (height, width, 4) uint8 array as a PNG image.
     """
 
-    data = get_terrain_data()
-    hazards = data["hazards"]
-
-    height, width = hazards.shape
-
-    # Convert hazard codes into RGBA pixels.
-    rgba = np.zeros(
-        (height, width, 4),
-        dtype=np.uint8
-    )
-
-    for code, color in HAZARD_COLORS.items():
-        rgba[hazards == code] = color
+    height, width = rgba.shape[:2]
 
     # PNG scanlines require a filter byte at the
     # beginning of each row. Filter 0 means no filter.
@@ -232,11 +220,6 @@ def create_hazard_png():
         b"\x00" + rgba[row].tobytes()
         for row in range(height)
     )
-
-    compressed = zlib.compress(raw_data)
-
-    # PNG header.
-    png_signature = b"\x89PNG\r\n\x1a\n"
 
     # Image header: 8-bit RGBA, standard compression/filter.
     ihdr = struct.pack(
@@ -250,11 +233,115 @@ def create_hazard_png():
         0
     )
 
-    png_data = (
-        png_signature
+    return (
+        b"\x89PNG\r\n\x1a\n"
         + _png_chunk(b"IHDR", ihdr)
-        + _png_chunk(b"IDAT", compressed)
+        + _png_chunk(b"IDAT", zlib.compress(raw_data))
         + _png_chunk(b"IEND", b"")
     )
 
-    return png_data
+
+def create_hazard_png():
+    """
+    Convert the hazard classification raster into
+    a transparent RGBA PNG image.
+    """
+
+    hazards = get_terrain_data()["hazards"]
+
+    rgba = np.zeros(
+        hazards.shape + (4,),
+        dtype=np.uint8
+    )
+
+    for code, color in HAZARD_COLORS.items():
+        rgba[hazards == code] = color
+
+    return _rgba_to_png(rgba)
+
+
+# --------------------------------------------------
+# BLOCKED TERRAIN (cells above the route slope limit)
+# --------------------------------------------------
+
+# Magenta, so it stands apart from the hazard colours.
+BLOCKED_COLOR = (255, 43, 214, 235)
+
+
+def _parse_max_slope(max_slope):
+
+    try:
+        max_slope = float(max_slope)
+
+    except (TypeError, ValueError):
+        raise ValueError("The slope limit must be a number.")
+
+    if not 1 <= max_slope <= 90:
+        raise ValueError(
+            "The slope limit must be between 1 and 90 degrees."
+        )
+
+    return max_slope
+
+
+def create_blocked_png(max_slope):
+    """
+    PNG marking every cell steeper than the slope limit:
+    the cells the route planner refuses to cross.
+    """
+
+    max_slope = _parse_max_slope(max_slope)
+
+    slope = get_terrain_data()["slope"]
+
+    rgba = np.zeros(
+        slope.shape + (4,),
+        dtype=np.uint8
+    )
+
+    rgba[slope > max_slope] = BLOCKED_COLOR
+
+    return _rgba_to_png(rgba)
+
+
+def get_blocked_summary(max_slope):
+    """
+    How much of the region is blocked at a given slope limit.
+    """
+
+    max_slope = _parse_max_slope(max_slope)
+
+    data = get_terrain_data()
+    region = data["region"]
+    slope = data["slope"]
+
+    blocked = slope > max_slope
+
+    # Ground area of a pixel shrinks east-west with latitude.
+    pixel_km = pixel_size_meters(region) / 1000.0
+
+    row_area_km2 = (
+        pixel_km ** 2
+        * np.cos(np.deg2rad(region["latitudes"]))
+    )
+
+    blocked_area = float(
+        np.sum(blocked * row_area_km2[:, np.newaxis])
+    )
+
+    total_area = float(
+        np.sum(row_area_km2) * slope.shape[1]
+    )
+
+    count = int(np.count_nonzero(blocked))
+
+    return {
+        "status": "success",
+        "max_slope_degrees": max_slope,
+        "blocked_pixels": count,
+        "total_pixels": int(slope.size),
+        "blocked_percentage": round(count / slope.size * 100, 3),
+        "blocked_area_km2": round(blocked_area, 1),
+        "total_area_km2": round(total_area, 1),
+        "hazard_summary": data["hazard_summary"]
+    }

@@ -13,7 +13,9 @@ from backend.science_stops import get_science_stops
 from backend.terrain_service import (
     get_terrain_summary,
     inspect_terrain,
-    create_hazard_png
+    create_hazard_png,
+    create_blocked_png,
+    get_blocked_summary
 )
 
 from backend.survival_simulator import (
@@ -213,6 +215,54 @@ def terrain_hazard_overlay():
 
         return jsonify({
             "error": "Unable to generate hazard overlay."
+        }), 500
+
+
+@app.route("/api/terrain/blocked-overlay")
+def terrain_blocked_overlay():
+    try:
+        png_data = create_blocked_png(
+            request.args.get("max_slope", default=20)
+        )
+
+        return send_file(
+            BytesIO(png_data),
+            mimetype="image/png",
+            download_name="blocked_terrain_overlay.png"
+        )
+
+    except ValueError as error:
+        return jsonify({
+            "error": str(error)
+        }), 400
+
+    except Exception:
+        app.logger.exception("Blocked overlay generation failed")
+
+        return jsonify({
+            "error": "Unable to generate blocked terrain overlay."
+        }), 500
+
+
+@app.route("/api/terrain/blocked-summary")
+def terrain_blocked_summary():
+    try:
+        return jsonify(
+            get_blocked_summary(
+                request.args.get("max_slope", default=20)
+            )
+        )
+
+    except ValueError as error:
+        return jsonify({
+            "error": str(error)
+        }), 400
+
+    except Exception:
+        app.logger.exception("Blocked summary failed")
+
+        return jsonify({
+            "error": "Unable to summarise blocked terrain."
         }), 500
 
 

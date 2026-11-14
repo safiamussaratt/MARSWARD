@@ -169,6 +169,38 @@ const hazardLayer = new ImageLayer({
 });
 
 // --------------------------------------------------
+// BLOCKED TERRAIN OVERLAY
+// --------------------------------------------------
+
+// Squares steeper than the route slope limit. The image is
+// rebuilt whenever the limit changes.
+
+function regionExtent() {
+    return [
+        JEZERO_BOUNDS.west,
+        JEZERO_BOUNDS.south,
+        JEZERO_BOUNDS.east,
+        JEZERO_BOUNDS.north
+    ];
+}
+
+function blockedSource(maxSlope) {
+    return new ImageStatic({
+        url: `${API_BASE}/api/terrain/blocked-overlay?max_slope=${encodeURIComponent(maxSlope)}`,
+        imageExtent: regionExtent(),
+        projection: marsProjection,
+        imageSize: RASTER_SIZE,
+        interpolate: false
+    });
+}
+
+const blockedLayer = new ImageLayer({
+    source: blockedSource(20),
+    visible: false,
+    zIndex: 2.5
+});
+
+// --------------------------------------------------
 // ROUTE, SCIENCE STOP AND MARKER LAYERS
 // --------------------------------------------------
 
@@ -252,6 +284,7 @@ const map = new Map({
     layers: [
         terrainLayer,
         hazardLayer,
+        blockedLayer,
         routeLayer,
         stopsLayer,
         markerLayer
@@ -572,6 +605,149 @@ hazardSource.on("imageloadend", () => {
 hazardSource.on("imageloaderror", () => {
     console.error("MARSWARD: Hazard overlay image failed to load.");
 });
+
+// --------------------------------------------------
+// HAZARD ANALYSIS (blocked terrain at the slope limit)
+// --------------------------------------------------
+
+const blockedToggle = element("blocked-toggle");
+const hazardSlider = element("hazard-slope");
+
+let blockedTimer = null;
+
+function currentSlopeLimit() {
+    const value = Number(element("eva-slope")?.value);
+
+    return Number.isFinite(value) && value >= 1 && value <= 90 ? value : 20;
+}
+
+function setBlockedVisible(isVisible) {
+    blockedLayer.setVisible(isVisible);
+
+    if (blockedToggle) {
+        blockedToggle.checked = isVisible;
+    }
+
+    updateText(
+        "blocked-layer-status",
+        isVisible ? "OVERLAY: ON" : "OVERLAY: OFF"
+    );
+}
+
+async function refreshBlockedTerrain() {
+    const limit = currentSlopeLimit();
+
+    blockedLayer.setSource(blockedSource(limit));
+
+    updateText("hazard-slope-value", `${limit}°`);
+
+    if (hazardSlider && Number(hazardSlider.value) !== limit) {
+        hazardSlider.value = Math.min(limit, Number(hazardSlider.max));
+    }
+
+    const stats = element("hazard-panel-stats");
+
+    if (!stats) {
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `${API_BASE}/api/terrain/blocked-summary?max_slope=${encodeURIComponent(limit)}`
+        );
+
+        if (!response.ok) {
+            throw new Error(`Blocked summary returned ${response.status}`);
+        }
+
+        const data = await response.json();
+        const categories = data.hazard_summary.categories;
+
+        const classes = Object.entries(categories).map(([label, values]) => `
+            <span class="route-stat">
+                <span class="legend-swatch ${label.toLowerCase().replace(/\s+/g, "-")}"></span>
+                ${escapeHtml(label)}: <strong>${formatNumber(values.percentage, 2)}%</strong>
+            </span>
+        `).join("");
+
+        stats.innerHTML = `
+            <div class="hazard-panel-headline">
+                <span class="legend-swatch blocked"></span>
+                <strong>${data.blocked_pixels.toLocaleString("en-US")}</strong>
+                of ${data.total_pixels.toLocaleString("en-US")} squares are blocked
+                (<strong>${formatNumber(data.blocked_percentage, 2)}%</strong>,
+                about <strong>${Math.round(data.blocked_area_km2).toLocaleString("en-US")} km²</strong>)
+                at a ${limit}° limit.
+            </div>
+            <div class="hazard-panel-classes">${classes}</div>
+        `;
+
+    } catch (error) {
+        console.error("Blocked terrain error:", error);
+        stats.textContent = "Could not load blocked terrain. Check the backend.";
+    }
+}
+
+function scheduleBlockedRefresh() {
+    clearTimeout(blockedTimer);
+    blockedTimer = setTimeout(refreshBlockedTerrain, 200);
+}
+
+blockedToggle?.addEventListener("change", (event) => {
+    setBlockedVisible(event.target.checked);
+});
+
+// The slider and the route planner's slope limit stay in step.
+hazardSlider?.addEventListener("input", () => {
+    if (element("eva-slope")) {
+        element("eva-slope").value = hazardSlider.value;
+    }
+
+    updateText("hazard-slope-value", `${hazardSlider.value}°`);
+    scheduleBlockedRefresh();
+});
+
+element("eva-slope")?.addEventListener("input", scheduleBlockedRefresh);
+
+// Hazard Analysis shows its own panel in place of the route controls.
+function setMapMode(mode) {
+    const isHazard = mode === "hazard";
+
+    const toggle = (id, hidden) => {
+        const target = element(id);
+
+        if (target) {
+            target.hidden = hidden;
+        }
+    };
+
+    toggle("hazard-panel", !isHazard);
+    toggle("route-controls", isHazard);
+    toggle("eva-controls", isHazard);
+    toggle("route-results", isHazard);
+
+    updateText(
+        "map-title",
+        isHazard ? "Hazard Analysis" : "Martian Surface Explorer"
+    );
+
+    updateText(
+        "map-subtitle",
+        isHazard
+            ? "Slope classes and the terrain routes cannot cross"
+            : "Explore NASA planetary terrain data"
+    );
+
+    if (isHazard) {
+        if (hazardToggle && !hazardToggle.checked) {
+            hazardToggle.checked = true;
+            updateHazardLayerVisibility(true);
+        }
+
+        setBlockedVisible(true);
+        refreshBlockedTerrain();
+    }
+}
 
 // --------------------------------------------------
 // TERRAIN SUMMARY
@@ -1035,16 +1211,21 @@ window.addEventListener("marsward:view", (event) => {
         return;
     }
 
-    // The map was hidden, so its size must be recalculated.
+    setMapMode(mode);
+
+    // The map was hidden or resized, so recalculate its size.
     map.updateSize();
 
     if (mode === "route") {
         element("start-lon")?.focus();
     }
 
-    if (mode === "hazard" && hazardToggle && !hazardToggle.checked) {
-        hazardToggle.checked = true;
-        updateHazardLayerVisibility(true);
+    // Hazard Analysis shows the whole study region.
+    if (mode === "hazard") {
+        map.getView().fit(regionExtent(), {
+            padding: [20, 20, 20, 20],
+            duration: 400
+        });
     }
 });
 
@@ -1059,6 +1240,7 @@ updateCoordinates(DEFAULT_START[0], DEFAULT_START[1]);
 checkBackendHealth();
 loadTerrainSummary();
 loadScienceStops();
+refreshBlockedTerrain();
 inspectTerrain(DEFAULT_START[0], DEFAULT_START[1]);
 
 console.log("MARSWARD mission-control frontend initialized.");

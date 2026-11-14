@@ -64,12 +64,22 @@
                 </span>
             </label>
 
+            <label class="layer-toggle">
+                <input type="checkbox" id="blocked-toggle">
+                <span>
+                    <strong>Blocked Terrain</strong>
+                    <small>Squares steeper than the route slope limit</small>
+                    <small id="blocked-layer-status">OVERLAY: OFF</small>
+                </span>
+            </label>
+
             <div class="hazard-legend">
                 <p>HAZARD LEGEND</p>
                 <div><span class="legend-swatch gentle"></span> Gentle (0–5°)</div>
                 <div><span class="legend-swatch moderate"></span> Moderate (5–15°)</div>
                 <div><span class="legend-swatch steep"></span> Steep (15–25°)</div>
                 <div><span class="legend-swatch very-steep"></span> Very Steep (&gt;25°)</div>
+                <div><span class="legend-swatch blocked"></span> Blocked for routes</div>
             </div>
 
             <div class="sidebar-divider"></div>
@@ -93,13 +103,27 @@
 
             <div class="map-heading">
                 <div>
-                    <h3>Martian Surface Explorer</h3>
-                    <p>Explore NASA planetary terrain data</p>
+                    <h3 id="map-title">Martian Surface Explorer</h3>
+                    <p id="map-subtitle">Explore NASA planetary terrain data</p>
                 </div>
                 <span class="data-tag" id="dataset-tag">NASA / MOLA</span>
             </div>
 
-            <div class="route-controls">
+            <div id="hazard-panel" class="hazard-panel" hidden>
+                <div class="hazard-panel-control">
+                    <label for="hazard-slope">
+                        ROUTE SLOPE LIMIT: <strong id="hazard-slope-value">20°</strong>
+                    </label>
+                    <input id="hazard-slope" type="range" min="1" max="40" step="1" value="20">
+                    <small>Move the slider to see which squares the route planner refuses to cross.</small>
+                </div>
+
+                <div id="hazard-panel-stats" class="hazard-panel-stats">
+                    Loading blocked terrain...
+                </div>
+            </div>
+
+            <div class="route-controls" id="route-controls">
                 <div class="coordinate-input">
                     <label>MAP CLICK SETS</label>
                     <div class="segmented" role="group" aria-label="Map click sets">
@@ -137,7 +161,7 @@
                 </button>
             </div>
 
-            <div class="route-controls eva-controls">
+            <div class="route-controls eva-controls" id="eva-controls">
                 <div class="coordinate-input">
                     <label for="eva-mode">TRAVEL MODE</label>
                     <select id="eva-mode">

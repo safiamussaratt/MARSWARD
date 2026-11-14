@@ -1134,3 +1134,82 @@ button.nav-item:focus-visible,
 .verdict-assumptions ul {
     margin: 6px 0 0 16px;
 }
+
+
+/* MARSWARD hazard analysis panel */
+
+.legend-swatch.blocked {
+    background: #ff2bd6;
+}
+
+.hazard-panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: center;
+    background: #191c1f;
+    padding: 14px;
+    border: 1px solid #343638;
+    border-left: 3px solid #ff2bd6;
+    border-radius: 5px;
+    margin-bottom: 12px;
+}
+
+.hazard-panel-control {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 240px;
+}
+
+.hazard-panel-control label {
+    font-size: 10px;
+    color: #d18a65;
+    letter-spacing: 1px;
+}
+
+.hazard-panel-control label strong {
+    font-size: 14px;
+    color: #eee9e3;
+}
+
+.hazard-panel-control input[type="range"] {
+    accent-color: #ff2bd6;
+}
+
+.hazard-panel-control small {
+    font-size: 10px;
+    color: #999;
+}
+
+.hazard-panel-stats {
+    flex: 1;
+    min-width: 260px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #c9c9c9;
+}
+
+.hazard-panel-headline strong {
+    color: #eee9e3;
+}
+
+.hazard-panel-headline .legend-swatch,
+.hazard-panel-classes .legend-swatch {
+    margin-right: 5px;
+    vertical-align: middle;
+}
+
+.hazard-panel-classes {
+    margin-top: 4px;
+    font-size: 11px;
+}
+
+
+/* Keep the whole map on screen instead of stretching it to the
+   height of the side panels. */
+
+#map {
+    flex: none;
+    height: clamp(450px, 62vh, 760px);
+}
