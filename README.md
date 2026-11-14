@@ -7,7 +7,7 @@ A mission-planning dashboard for Jezero Crater on Mars. It shows real NASA eleva
 ## What it does
 
 - **Martian Explorer**: pan-and-zoom map of Jezero. Click anywhere in the study area (74–81° E, 16–21° N) for elevation, slope and hazard class.
-- **Hazard Analysis**: colored overlay rating every map square as Gentle (0–5°), Moderate (5–15°), Steep (15–25°) or Very Steep (over 25°).
+- **Hazard Analysis**: colored overlay rating every map square as Gentle (0–5°), Moderate (5–15°), Steep (15–25°) or Very Steep (over 25°). A slope-limit slider marks in magenta the squares the route planner refuses to cross, with their count and area.
 - **Route Planner**: click the map to set a start and destination, or click a named science stop. The route avoids steep ground and never crosses squares above the slope limit (20° by default).
 - **GO / NO-GO verdict**: for each route, compares travel time (slower on slopes) plus time at the destination against the time limit, and checks the steepest slope, dust and air temperature.
 - **Survival Simulator**: checks whether water, food and oxygen supplies last a mission for a given crew, with an emergency reserve.
@@ -110,6 +110,8 @@ The science stops in `backend/science_stops.py` are specific to Jezero and need 
 | `GET /api/terrain/summary` | Elevation, slope and hazard statistics |
 | `GET /api/terrain/inspect?lon=&lat=` | Terrain at one point |
 | `GET /api/terrain/hazard-overlay` | Hazard overlay image |
+| `GET /api/terrain/blocked-overlay?max_slope=` | Image of squares above a slope limit |
+| `GET /api/terrain/blocked-summary?max_slope=` | Count and area of those squares |
 | `POST /api/route` | Route and verdict. Body: `start`, `destination`, optional `eva` settings |
 | `GET /api/science/stops` | Named science stops |
 | `GET /api/science/overview` | Everything the Science Explorer shows |
