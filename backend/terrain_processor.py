@@ -1,15 +1,15 @@
 import numpy as np
 
 from backend.mars_data import (
-    load_mola_data,
-    extract_region,
+    get_region,
     get_elevation_statistics
 )
 
 
-# MOLA metadata:
-# Mars reference radius = 3,396,000 metres
-# Resolution = 1/64 degree per pixel
+# Mars reference radius = 3,396,000 metres.
+# The values below are the MOLA defaults (1/64 degree per
+# pixel). A region that carries its own "pixels_per_degree"
+# overrides them in calculate_slope().
 
 MARS_RADIUS_METERS = 3_396_000.0
 PIXELS_PER_DEGREE = 64
@@ -111,6 +111,14 @@ def calculate_slope(region):
 
     elevation, latitudes = validate_region(region)
 
+    # North-south pixel size from the region's own resolution.
+    pixel_size = (
+        MARS_RADIUS_METERS
+        * np.deg2rad(
+            1.0 / region.get("pixels_per_degree", PIXELS_PER_DEGREE)
+        )
+    )
+
     edge_order = (
         2 if min(elevation.shape) >= 3 else 1
     )
@@ -118,7 +126,7 @@ def calculate_slope(region):
     # North-south elevation gradient.
     dz_dy = np.gradient(
         elevation,
-        PIXEL_SIZE_METERS,
+        pixel_size,
         axis=0,
         edge_order=edge_order
     )
@@ -127,7 +135,7 @@ def calculate_slope(region):
     latitude_radians = np.deg2rad(latitudes)
 
     east_west_pixel_size = (
-        PIXEL_SIZE_METERS
+        pixel_size
         * np.cos(latitude_radians)
     )
 
@@ -199,16 +207,12 @@ def get_slope_statistics(slope):
 
 def analyze_jezero():
     """
-    Load MOLA data, extract Jezero, and calculate slope.
+    Load the terrain region and calculate slope.
     """
 
-    print("\nLoading NASA MOLA elevation data...")
+    print("\nLoading terrain region...")
 
-    elevation = load_mola_data()
-
-    print("Extracting Jezero Crater region...")
-
-    region = extract_region(elevation)
+    region = get_region()
 
     print("Calculating elevation statistics...")
 

@@ -1,31 +1,21 @@
-
 import math
 import heapq
 import numpy as np
 
 from backend.mars_data import (
-    load_mola_data,
-    extract_region,
     coordinates_to_pixel,
     pixel_to_coordinates,
-    JEZERO_BOUNDS,
     MARS_RADIUS_KM
 )
 
-from backend.terrain_processor import calculate_slope
+from backend.terrain_service import get_terrain_data
 
 
 # --------------------------------------------------
 # CONFIGURATION
 # --------------------------------------------------
 
-MIN_LON = JEZERO_BOUNDS["west"]
-MAX_LON = JEZERO_BOUNDS["east"]
-
-MIN_LAT = JEZERO_BOUNDS["south"]
-MAX_LAT = JEZERO_BOUNDS["north"]
-
-# A* uses the actual 320 x 448 MOLA Jezero raster.
+# A* runs on the real elevation raster of the active region.
 # No simulated terrain is generated.
 
 MOVEMENT_DIRECTIONS = [
@@ -46,6 +36,18 @@ MOVEMENT_DIRECTIONS = [
 SLOPE_WEIGHT = 0.035
 STEEP_SLOPE_WEIGHT = 0.003
 ELEVATION_WEIGHT = 0.05
+
+# Cells steeper than the slope limit are impassable when a
+# limit is supplied. 20 degrees is a prototype default, not a
+# validated rover or astronaut limit.
+
+DEFAULT_MAX_SLOPE_DEGREES = 20.0
+
+
+class NoRouteError(ValueError):
+    """
+    Raised when no route exists within the slope limit.
+    """
 
 
 # --------------------------------------------------
@@ -68,15 +70,12 @@ def get_terrain():
     if _TERRAIN_CACHE is not None:
         return _TERRAIN_CACHE
 
-    print("\n[A*] Loading NASA MOLA terrain...")
+    # Shared with the terrain service, so the region is loaded
+    # and its slope calculated only once per process.
+    data = get_terrain_data()
 
-    mola_data = load_mola_data()
-
-    region = extract_region(mola_data)
-
-    print("[A*] Calculating actual terrain slope...")
-
-    slope = calculate_slope(region)
+    region = data["region"]
+    slope = data["slope"]
 
     elevation = np.asarray(
         region["elevation"],
@@ -305,7 +304,7 @@ def terrain_cost(current, neighbor, terrain):
 # A* PATHFINDING
 # --------------------------------------------------
 
-def find_path(start, goal, terrain):
+def find_path(start, goal, terrain, max_slope=None):
     """
     A* pathfinding over the actual NASA MOLA raster.
 
@@ -338,6 +337,24 @@ def find_path(start, goal, terrain):
         raise ValueError(
             "Destination pixel is outside the terrain raster."
         )
+
+    slope_raster = terrain["slope"]
+
+    if max_slope is not None:
+
+        for label, pixel in (
+            ("starting point", start),
+            ("destination", goal)
+        ):
+            pixel_slope = float(
+                slope_raster[pixel[1], pixel[0]]
+            )
+
+            if pixel_slope > max_slope:
+                raise NoRouteError(
+                    f"The {label} sits on a {pixel_slope:.1f}° "
+                    f"slope, above the {max_slope:g}° limit."
+                )
 
     if start == goal:
         return {
@@ -484,6 +501,13 @@ def find_path(start, goal, terrain):
             if visited[neighbor_index]:
                 continue
 
+            # Blocked terrain: never enter a cell above the limit.
+            if (
+                max_slope is not None
+                and slope_raster[neighbor[1], neighbor[0]] > max_slope
+            ):
+                continue
+
             movement_cost = terrain_cost(
                 current,
                 neighbor,
@@ -525,7 +549,7 @@ def find_path(start, goal, terrain):
 # MAIN ROUTE FUNCTION
 # --------------------------------------------------
 
-def calculate_route(start, destination):
+def calculate_route(start, destination, max_slope_degrees=None):
     """
     Calculate a terrain-aware route between two
     longitude/latitude coordinates inside Jezero Crater.
@@ -584,21 +608,39 @@ def calculate_route(start, destination):
             "Coordinates must be finite numbers."
         )
 
-    if not (
-        MIN_LON <= start_lon <= MAX_LON
-        and MIN_LON <= end_lon <= MAX_LON
-        and MIN_LAT <= start_lat <= MAX_LAT
-        and MIN_LAT <= end_lat <= MAX_LAT
-    ):
-        raise ValueError(
-            "Both locations must be inside the Jezero demonstration region."
-        )
+
+    if max_slope_degrees is not None:
+
+        try:
+            max_slope_degrees = float(max_slope_degrees)
+
+        except (TypeError, ValueError):
+            raise ValueError(
+                "The slope limit must be a number."
+            )
+
+        if not 1 <= max_slope_degrees <= 90:
+            raise ValueError(
+                "The slope limit must be between 1 and 90 degrees."
+            )
 
     print("\n[A*] Calculating route...")
 
     terrain = get_terrain()
 
-    # Convert geographic coordinates to actual MOLA pixels.
+    bounds = terrain["region"]["bounds"]
+
+    if not (
+        bounds["west"] <= start_lon <= bounds["east"]
+        and bounds["west"] <= end_lon <= bounds["east"]
+        and bounds["south"] <= start_lat <= bounds["north"]
+        and bounds["south"] <= end_lat <= bounds["north"]
+    ):
+        raise ValueError(
+            "Both locations must be inside the study region."
+        )
+
+    # Convert geographic coordinates to raster pixels.
     start_column, start_row = coordinates_to_pixel(
         start_lon,
         start_lat
@@ -653,13 +695,42 @@ def calculate_route(start, destination):
     result = find_path(
         start_pixel,
         goal_pixel,
-        terrain
+        terrain,
+        max_slope=max_slope_degrees
     )
 
     if result is None:
-        raise ValueError(
+
+        if max_slope_degrees is not None:
+            raise NoRouteError(
+                "No route reaches the destination without "
+                f"crossing slopes above {max_slope_degrees:g}°."
+            )
+
+        raise NoRouteError(
             "No route could be calculated."
         )
+
+    # Terrain profile along the route, one value per route point.
+    elevations = [
+        float(terrain["elevation"][y, x])
+        for x, y in result["path"]
+    ]
+
+    slopes = [
+        float(terrain["slope"][y, x])
+        for x, y in result["path"]
+    ]
+
+    ascent = sum(
+        max(0.0, second - first)
+        for first, second in zip(elevations, elevations[1:])
+    )
+
+    descent = sum(
+        max(0.0, first - second)
+        for first, second in zip(elevations, elevations[1:])
+    )
 
     # Convert every raster pixel in the path to
     # its geographic pixel-centre coordinates.
@@ -720,7 +791,28 @@ def calculate_route(start, destination):
 
         "visited_nodes": result["visited"],
 
-        "model": "NASA MOLA ACTUAL TERRAIN - A*",
+        "elevations_m": elevations,
+
+        "slopes_degrees": [
+            round(value, 2) for value in slopes
+        ],
+
+        "max_slope_on_route_degrees": round(max(slopes), 2),
+
+        "mean_slope_on_route_degrees": round(
+            sum(slopes) / len(slopes),
+            2
+        ),
+
+        "ascent_m": round(ascent, 1),
+
+        "descent_m": round(descent, 1),
+
+        "max_slope_limit_degrees": max_slope_degrees,
+
+        "model": (
+            f'{terrain["region"]["dataset"]["name"]} TERRAIN - A*'
+        ),
 
         "grid_size": (
             f'{terrain["rows"]} x {terrain["columns"]}'
@@ -731,11 +823,12 @@ def calculate_route(start, destination):
             terrain["columns"]
         ],
 
-        "terrain_source": "NASA MOLA MEGDR",
+        "terrain_source": terrain["region"]["dataset"]["name"],
 
         "terrain_resolution": (
-            "1/64 degree per pixel"
+            f'{terrain["region"]["pixels_per_degree"]:g} '
+            "pixels per degree"
         ),
 
-        "region": "Jezero Crater"
+        "region": terrain["region"]["name"]
     }

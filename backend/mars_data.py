@@ -1,15 +1,65 @@
+"""
+MARSWARD terrain data access.
+
+THIS IS THE ONE FILE TO EDIT WHEN THE DATASET CHANGES.
+
+Every other module gets its terrain from get_region(), which
+returns one dictionary:
+
+    elevation           2D float32 array, metres, row 0 = north
+    latitudes           1D array, pixel-centre latitude per row
+    longitudes          1D array, pixel-centre longitude per column
+    bounds              {"west", "east", "south", "north"} in degrees
+    pixels_per_degree   raster resolution
+    name                region name shown in the app
+    dataset             DATASET_INFO (below)
+
+get_region() looks for the small region file first
+(data/terrain/jezero_region.npz, stored in the repository).
+If it is missing, it falls back to the full NASA MOLA tile.
+
+To switch to a different dataset:
+  1. Write a loader that returns the elevation grid as a 2D
+     array (north at the top) with its bounds and resolution.
+  2. Save it with save_region_file(), or point REGION_PATH at it.
+  3. Update DATASET_INFO.
+Nothing else needs to change: slopes, hazards, routes, the map
+overlay and the Science Explorer all read from get_region().
+"""
+
 import os
+
 import numpy as np
 
 
-# NASA MOLA MEGDR dataset configuration
+# --------------------------------------------------
+# DATASET DESCRIPTION (edit when the dataset changes)
+# --------------------------------------------------
 
-DATA_PATH = os.path.join(
+DATASET_INFO = {
+    "name": "NASA MOLA MEGDR",
+    "short_name": "NASA / MOLA",
+    "instrument": (
+        "Mars Orbiter Laser Altimeter (MOLA), Mars Global Surveyor"
+    ),
+    "product": "MEGDR (Mission Experiment Gridded Data Record)",
+    "source_file": "megt90n000gb.img",
+    "format": "16-bit signed integers, big-endian, metres"
+}
+
+REGION_NAME = "Jezero Crater"
+
+TERRAIN_DIR = os.path.join(
     os.path.dirname(os.path.dirname(__file__)),
     "data",
-    "terrain",
-    "megt90n000gb.img"
+    "terrain"
 )
+
+# Small region file kept in the repository.
+REGION_PATH = os.path.join(TERRAIN_DIR, "jezero_region.npz")
+
+# Full NASA MOLA tile (133 MB, not in the repository).
+DATA_PATH = os.path.join(TERRAIN_DIR, "megt90n000gb.img")
 
 ROWS = 5760
 COLUMNS = 11520
@@ -26,9 +76,13 @@ JEZERO_BOUNDS = {
 }
 
 
+# --------------------------------------------------
+# FULL MOLA TILE
+# --------------------------------------------------
+
 def load_mola_data():
     """
-    Load the NASA MOLA elevation raster.
+    Load the full NASA MOLA elevation raster.
 
     Data format:
     - Signed 16-bit integer
@@ -70,9 +124,9 @@ def extract_region(
     north_lat=21.0
 ):
     """
-    Extract a geographical region from the MOLA raster.
+    Extract a geographical region from the full MOLA raster.
 
-    Dataset coverage:
+    Tile coverage:
     Longitude: 0 to 180 degrees east
     Latitude: 0 to 90 degrees north
 
@@ -86,25 +140,11 @@ def extract_region(
     ):
         raise ValueError("Invalid geographical boundaries.")
 
-    col_start = int(
-        np.floor(west_lon * PIXELS_PER_DEGREE)
-    )
+    col_start = int(np.floor(west_lon * PIXELS_PER_DEGREE))
+    col_end = int(np.ceil(east_lon * PIXELS_PER_DEGREE))
 
-    col_end = int(
-        np.ceil(east_lon * PIXELS_PER_DEGREE)
-    )
-
-    row_start = int(
-        np.floor(
-            (90 - north_lat) * PIXELS_PER_DEGREE
-        )
-    )
-
-    row_end = int(
-        np.ceil(
-            (90 - south_lat) * PIXELS_PER_DEGREE
-        )
-    )
+    row_start = int(np.floor((90 - north_lat) * PIXELS_PER_DEGREE))
+    row_end = int(np.ceil((90 - south_lat) * PIXELS_PER_DEGREE))
 
     region = elevation[
         row_start:row_end,
@@ -114,29 +154,155 @@ def extract_region(
     if region.size == 0:
         raise ValueError("The extracted MOLA region is empty.")
 
-    # Coordinates represent pixel centres.
-    rows = np.arange(row_start, row_end)
-    columns = np.arange(col_start, col_end)
-
-    latitudes = 90 - (
-        rows + 0.5
-    ) / PIXELS_PER_DEGREE
-
-    longitudes = (
-        columns + 0.5
-    ) / PIXELS_PER_DEGREE
-
-    return {
-        "elevation": region,
-        "latitudes": latitudes,
-        "longitudes": longitudes,
-        "bounds": {
+    return build_region(
+        region,
+        {
             "west": west_lon,
             "east": east_lon,
             "south": south_lat,
             "north": north_lat
-        }
+        },
+        PIXELS_PER_DEGREE
+    )
+
+
+# --------------------------------------------------
+# REGION DICTIONARY AND REGION FILE
+# --------------------------------------------------
+
+def build_region(elevation, bounds, pixels_per_degree, name=REGION_NAME):
+    """
+    Build the region dictionary used across the app.
+
+    elevation: 2D array, metres, row 0 at the northern edge.
+    """
+
+    elevation = np.asarray(elevation, dtype=np.float32)
+
+    if elevation.ndim != 2 or elevation.size == 0:
+        raise ValueError("Elevation must be a non-empty 2D array.")
+
+    rows, columns = elevation.shape
+
+    # Coordinates are pixel centres.
+    latitudes = bounds["north"] - (
+        np.arange(rows) + 0.5
+    ) / pixels_per_degree
+
+    longitudes = bounds["west"] + (
+        np.arange(columns) + 0.5
+    ) / pixels_per_degree
+
+    return {
+        "elevation": elevation,
+        "latitudes": latitudes,
+        "longitudes": longitudes,
+        "bounds": {
+            key: float(bounds[key])
+            for key in ("west", "east", "south", "north")
+        },
+        "pixels_per_degree": float(pixels_per_degree),
+        "name": name,
+        "dataset": DATASET_INFO
     }
+
+
+def save_region_file(region, path=REGION_PATH):
+    """
+    Save a region as a small compressed file for the repository.
+    """
+
+    bounds = region["bounds"]
+
+    np.savez_compressed(
+        path,
+        elevation=np.round(region["elevation"]).astype(np.int16),
+        bounds=np.array(
+            [
+                bounds["west"],
+                bounds["east"],
+                bounds["south"],
+                bounds["north"]
+            ],
+            dtype=np.float64
+        ),
+        pixels_per_degree=np.float64(region["pixels_per_degree"]),
+        name=np.str_(region.get("name", REGION_NAME))
+    )
+
+
+def load_region_file(path=REGION_PATH):
+    """
+    Load a region saved by save_region_file().
+    """
+
+    with np.load(path, allow_pickle=False) as data:
+
+        west, east, south, north = (
+            float(value) for value in data["bounds"]
+        )
+
+        return build_region(
+            data["elevation"],
+            {
+                "west": west,
+                "east": east,
+                "south": south,
+                "north": north
+            },
+            float(data["pixels_per_degree"]),
+            name=str(data["name"])
+        )
+
+
+_REGION_CACHE = None
+
+
+def get_region():
+    """
+    Return the terrain region the whole app works on.
+
+    Uses the region file when present, otherwise extracts the
+    region from the full MOLA tile. Loaded once per process.
+    """
+
+    global _REGION_CACHE
+
+    if _REGION_CACHE is None:
+
+        if os.path.exists(REGION_PATH):
+            _REGION_CACHE = load_region_file(REGION_PATH)
+
+        elif os.path.exists(DATA_PATH):
+            _REGION_CACHE = extract_region(
+                load_mola_data(),
+                west_lon=JEZERO_BOUNDS["west"],
+                east_lon=JEZERO_BOUNDS["east"],
+                south_lat=JEZERO_BOUNDS["south"],
+                north_lat=JEZERO_BOUNDS["north"]
+            )
+
+        else:
+            raise FileNotFoundError(
+                "No terrain data found. Expected "
+                f"{REGION_PATH} or {DATA_PATH}."
+            )
+
+    return _REGION_CACHE
+
+
+def pixel_size_meters(region=None):
+    """
+    North-south ground size of one pixel, in metres.
+    """
+
+    if region is None:
+        region = get_region()
+
+    return float(
+        MARS_RADIUS_METERS
+        * np.deg2rad(1.0 / region["pixels_per_degree"])
+    )
 
 
 def get_elevation_statistics(region):
@@ -164,27 +330,33 @@ def get_elevation_statistics(region):
     }
 
 
+# --------------------------------------------------
+# COORDINATE CONVERSION
+# --------------------------------------------------
+
 def coordinates_to_pixel(longitude, latitude, bounds=None):
     """
     Convert longitude/latitude to the nearest pixel
-    in an extracted MOLA region.
+    in the active region.
 
     Returns:
         (column, row)
     """
 
+    region = get_region()
+
     if bounds is None:
-        bounds = JEZERO_BOUNDS
+        bounds = region["bounds"]
 
-    column = round(
-        (longitude - bounds["west"])
-        * PIXELS_PER_DEGREE - 0.5
-    )
+    pixels_per_degree = region["pixels_per_degree"]
 
-    row = round(
-        (bounds["north"] - latitude)
-        * PIXELS_PER_DEGREE - 0.5
-    )
+    column = int(np.floor(
+        (longitude - bounds["west"]) * pixels_per_degree
+    ))
+
+    row = int(np.floor(
+        (bounds["north"] - latitude) * pixels_per_degree
+    ))
 
     return column, row
 
@@ -198,17 +370,21 @@ def pixel_to_coordinates(column, row, bounds=None):
         [longitude, latitude]
     """
 
+    region = get_region()
+
     if bounds is None:
-        bounds = JEZERO_BOUNDS
+        bounds = region["bounds"]
+
+    pixels_per_degree = region["pixels_per_degree"]
 
     longitude = (
         bounds["west"]
-        + (column + 0.5) / PIXELS_PER_DEGREE
+        + (column + 0.5) / pixels_per_degree
     )
 
     latitude = (
         bounds["north"]
-        - (row + 0.5) / PIXELS_PER_DEGREE
+        - (row + 0.5) / pixels_per_degree
     )
 
     return [
@@ -219,35 +395,10 @@ def pixel_to_coordinates(column, row, bounds=None):
 
 if __name__ == "__main__":
 
-    print("\n===================================")
-    print("       MARSWARD - NASA MOLA")
-    print("===================================")
+    region = get_region()
+    stats = get_elevation_statistics(region)
 
-    print("\nLoading NASA elevation dataset...")
-
-    elevation = load_mola_data()
-
-    print("Dataset loaded successfully!")
-    print("Full raster dimensions:", elevation.shape)
-
-    print("\nExtracting Jezero Crater region...")
-
-    jezero = extract_region(elevation)
-
-    print("Region extracted successfully!")
-
-    print("\nCalculating elevation statistics...")
-
-    stats = get_elevation_statistics(jezero)
-
-    print("\n========== JEZERO TERRAIN ==========")
-    print("Region dimensions:", stats["shape"])
-    print("Minimum elevation:", stats["minimum"], "m")
-    print("Maximum elevation:", stats["maximum"], "m")
-    print("Mean elevation:", round(stats["mean"], 2), "m")
-    print("Median elevation:", round(stats["median"], 2), "m")
-    print("Zero-valued pixels:", stats["zero_value_count"])
-
-    print("\n===================================")
-    print("       DATA PROCESSING COMPLETE")
-    print("===================================")
+    print("Dataset:", region["dataset"]["name"])
+    print("Region:", region["name"], region["bounds"])
+    print("Raster:", stats["shape"])
+    print("Elevation:", stats["minimum"], "to", stats["maximum"], "m")

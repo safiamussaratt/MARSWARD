@@ -1,4 +1,3 @@
-
 import Map from "https://esm.sh/ol@10.6.1/Map.js";
 import View from "https://esm.sh/ol@10.6.1/View.js";
 import TileLayer from "https://esm.sh/ol@10.6.1/layer/Tile.js";
@@ -16,6 +15,8 @@ import Style from "https://esm.sh/ol@10.6.1/style/Style.js";
 import CircleStyle from "https://esm.sh/ol@10.6.1/style/Circle.js";
 import Fill from "https://esm.sh/ol@10.6.1/style/Fill.js";
 import Stroke from "https://esm.sh/ol@10.6.1/style/Stroke.js";
+import Text from "https://esm.sh/ol@10.6.1/style/Text.js";
+import RegularShape from "https://esm.sh/ol@10.6.1/style/RegularShape.js";
 
 // --------------------------------------------------
 // CONFIGURATION
@@ -23,6 +24,9 @@ import Stroke from "https://esm.sh/ol@10.6.1/style/Stroke.js";
 
 const JEZERO = [77.7, 18.4];
 
+// Study region. These are fallbacks; the real values are
+// loaded from /api/config below, so a different dataset or
+// region needs no change in this file.
 const JEZERO_BOUNDS = {
     west: 74,
     east: 81,
@@ -30,10 +34,46 @@ const JEZERO_BOUNDS = {
     north: 21
 };
 
+let RASTER_SIZE = [448, 320];
+
 const NASA_TILE_URL =
     "https://trek.nasa.gov/tiles/Mars/EQ/Mars_MGS_MOLA_ClrShade_merge_global_463m/1.0.0/default/default028mm/{z}/{y}/{x}.jpg";
 
 const API_BASE = "";
+
+// Default trip: Perseverance landing site to the Three Forks
+// sample depot, about 3 km apart.
+const DEFAULT_START = [77.4508, 18.4447];
+const DEFAULT_END = [77.4, 18.455];
+
+const DEFAULT_ZOOM = 7;
+
+try {
+    const configResponse = await fetch(`${API_BASE}/api/config`);
+
+    if (configResponse.ok) {
+        const config = await configResponse.json();
+
+        Object.assign(JEZERO_BOUNDS, config.region.bounds);
+
+        RASTER_SIZE = [
+            config.region.raster_columns,
+            config.region.raster_rows
+        ];
+
+        const datasetTag = document.getElementById("dataset-tag");
+
+        if (datasetTag && config.dataset.short_name) {
+            datasetTag.textContent = config.dataset.short_name;
+        }
+    }
+} catch (error) {
+    console.warn("Could not load /api/config; using default region.", error);
+}
+
+function boundsText() {
+    return `${JEZERO_BOUNDS.west}°–${JEZERO_BOUNDS.east}° E, ${JEZERO_BOUNDS.south}°–${JEZERO_BOUNDS.north}° N`;
+}
 
 // --------------------------------------------------
 // HELPER FUNCTIONS
@@ -118,7 +158,7 @@ const hazardSource = new ImageStatic({
         JEZERO_BOUNDS.north
     ],
     projection: marsProjection,
-    imageSize: [448, 320]
+    imageSize: RASTER_SIZE
 });
 
 const hazardLayer = new ImageLayer({
@@ -129,39 +169,78 @@ const hazardLayer = new ImageLayer({
 });
 
 // --------------------------------------------------
-// ROUTE AND MARKER LAYERS
+// ROUTE, SCIENCE STOP AND MARKER LAYERS
 // --------------------------------------------------
+
+const LABEL_FONT = "bold 10px 'Segoe UI', Arial, sans-serif";
+
+function labelText(text, color, offsetY) {
+    return new Text({
+        text,
+        offsetY,
+        font: LABEL_FONT,
+        fill: new Fill({ color }),
+        stroke: new Stroke({ color: "#101214", width: 3 })
+    });
+}
 
 const routeSource = new VectorSource();
 
 const routeLayer = new VectorLayer({
     source: routeSource,
     zIndex: 3,
-    style: new Style({
+    style: (feature) => new Style({
         stroke: new Stroke({
-            color: "#ff9f43",
+            color: feature.get("color") || "#ff9f43",
             width: 3
         })
     })
 });
 
+// Named science stops (yellow diamonds). Click one to make it
+// the destination.
+
+const stopsSource = new VectorSource();
+
+const stopsLayer = new VectorLayer({
+    source: stopsSource,
+    zIndex: 4,
+    declutter: true,
+    style: (feature) => new Style({
+        image: new RegularShape({
+            points: 4,
+            radius: 7,
+            fill: new Fill({ color: "#f5d76e" }),
+            stroke: new Stroke({ color: "#101214", width: 2 })
+        }),
+        text: labelText(feature.get("name"), "#f5d76e", 16)
+    })
+});
+
+// Start (orange) and destination (blue) markers.
+
+const POINT_STYLES = {
+    start: { color: "#ff6b35", label: "START" },
+    end: { color: "#4fc3f7", label: "DESTINATION" }
+};
+
 const markerSource = new VectorSource();
 
 const markerLayer = new VectorLayer({
     source: markerSource,
-    zIndex: 4,
-    style: new Style({
-        image: new CircleStyle({
-            radius: 7,
-            fill: new Fill({
-                color: "#ff6b35"
+    zIndex: 5,
+    style: (feature) => {
+        const config = POINT_STYLES[feature.get("role")] || POINT_STYLES.start;
+
+        return new Style({
+            image: new CircleStyle({
+                radius: 7,
+                fill: new Fill({ color: config.color }),
+                stroke: new Stroke({ color: "#ffffff", width: 2 })
             }),
-            stroke: new Stroke({
-                color: "#ffffff",
-                width: 2
-            })
-        })
-    })
+            text: labelText(config.label, "#ffffff", -16)
+        });
+    }
 });
 
 // --------------------------------------------------
@@ -174,31 +253,88 @@ const map = new Map({
         terrainLayer,
         hazardLayer,
         routeLayer,
+        stopsLayer,
         markerLayer
     ],
     view: new View({
         projection: marsProjection,
         center: JEZERO,
-        zoom: 5,
+        zoom: DEFAULT_ZOOM,
         minZoom: 1,
-        maxZoom: 8,
+        // Tiles stop at zoom 8; higher zooms enlarge them so
+        // short trips of a few kilometres are still visible.
+        maxZoom: 11,
         extent: [-180, -90, 180, 90]
     })
 });
 
 // --------------------------------------------------
-// MAP MARKER
+// START AND DESTINATION POINTS
 // --------------------------------------------------
 
-function addMarker(lon, lat) {
-    markerSource.clear();
+const POINT_INPUTS = {
+    start: ["start-lon", "start-lat"],
+    end: ["end-lon", "end-lat"]
+};
 
-    const marker = new Feature({
-        geometry: new Point([lon, lat])
-    });
+const pointFeatures = { start: null, end: null };
 
-    markerSource.addFeature(marker);
+let clickMode = "start";
+
+function drawPoint(role, lon, lat) {
+    if (!pointFeatures[role]) {
+        pointFeatures[role] = new Feature({
+            geometry: new Point([lon, lat]),
+            role
+        });
+
+        markerSource.addFeature(pointFeatures[role]);
+    } else {
+        pointFeatures[role].getGeometry().setCoordinates([lon, lat]);
+    }
 }
+
+// Set the start or destination: updates the inputs and marker.
+function setPoint(role, lon, lat) {
+    const [lonId, latId] = POINT_INPUTS[role];
+
+    element(lonId).value = Number(lon).toFixed(4);
+    element(latId).value = Number(lat).toFixed(4);
+
+    drawPoint(role, lon, lat);
+}
+
+function readPoint(role) {
+    const [lonId, latId] = POINT_INPUTS[role];
+
+    return [
+        Number(element(lonId)?.value),
+        Number(element(latId)?.value)
+    ];
+}
+
+// Keep markers in step with typed coordinates.
+Object.entries(POINT_INPUTS).forEach(([role, ids]) => {
+    ids.forEach(id => {
+        element(id)?.addEventListener("input", () => {
+            const [lon, lat] = readPoint(role);
+
+            if (Number.isFinite(lon) && Number.isFinite(lat)) {
+                drawPoint(role, lon, lat);
+            }
+        });
+    });
+});
+
+function setClickMode(mode) {
+    clickMode = mode;
+
+    element("click-start")?.classList.toggle("active", mode === "start");
+    element("click-end")?.classList.toggle("active", mode === "end");
+}
+
+element("click-start")?.addEventListener("click", () => setClickMode("start"));
+element("click-end")?.addEventListener("click", () => setClickMode("end"));
 
 // --------------------------------------------------
 // COORDINATE DISPLAY
@@ -212,36 +348,58 @@ function updateCoordinates(lon, lat) {
         "map-coordinates",
         `LAT ${lat.toFixed(4)}° | LON ${lon.toFixed(4)}°`
     );
-
-    const startLon = element("start-lon");
-    const startLat = element("start-lat");
-
-    if (startLon && startLat) {
-        startLon.value = lon.toFixed(4);
-        startLat.value = lat.toFixed(4);
-    }
 }
 
 // --------------------------------------------------
 // TERRAIN INSPECTION
 // --------------------------------------------------
 
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+}
+
+// Render label/value readings into one of the terrain cards.
+function renderReadings(id, readings, note = "") {
+    const target = element(id);
+
+    if (!target) {
+        return;
+    }
+
+    const rows = readings.map(([label, value]) => `
+        <div class="terrain-reading">
+            <small>${escapeHtml(label)}</small>
+            <strong>${escapeHtml(value)}</strong>
+        </div>
+    `).join("");
+
+    target.innerHTML = rows + (
+        note
+            ? `<span class="terrain-coordinate">${escapeHtml(note)}</span>`
+            : ""
+    );
+}
+
+function renderCardMessage(id, message) {
+    const target = element(id);
+
+    if (target) {
+        target.innerHTML = `<p>${escapeHtml(message)}</p>`;
+    }
+}
+
 async function inspectTerrain(lon, lat) {
     if (!isInsideJezero(lon, lat)) {
-        updateText(
-            "selected-region",
-            "Outside Jezero Crater analysis area"
-        );
-
-        updateText(
+        renderCardMessage(
             "terrain-inspection",
-            "Select a location inside the Jezero Crater analysis area."
+            `Select a location inside the study area (${boundsText()}).`
         );
 
         return;
     }
-
-    updateText("selected-region", "Analyzing terrain...");
 
     try {
         const response = await fetch(
@@ -262,48 +420,18 @@ async function inspectTerrain(lon, lat) {
         const pixel = data.pixel_coordinates;
         const raster = data.raster_index;
 
-        updateText(
-            "selected-region",
-            "Jezero Crater"
-        );
+        const note = pixel && raster
+            ? `Pixel centre ${pixel.latitude.toFixed(4)}°, ${pixel.longitude.toFixed(4)}° · row ${raster.row}, column ${raster.column}`
+            : "";
 
-        updateText(
-            "selected-location",
-            `${lat.toFixed(4)}° N, ${lon.toFixed(4)}° E`
-        );
-
-        updateText(
+        renderReadings(
             "terrain-inspection",
-            `Elevation: ${formatNumber(terrain.elevation_metres, 1)} m | Slope: ${formatNumber(terrain.slope_degrees, 2)}° | Hazard: ${terrain.hazard_class}`
-        );
-
-        updateText(
-            "terrain-elevation",
-            `${formatNumber(terrain.elevation_metres, 1)} m`
-        );
-
-        updateText(
-            "terrain-slope",
-            `${formatNumber(terrain.slope_degrees, 2)}°`
-        );
-
-        updateText(
-            "terrain-hazard",
-            terrain.hazard_class || "Unknown"
-        );
-
-        updateText(
-            "terrain-pixel",
-            pixel
-                ? `${pixel.latitude.toFixed(4)}°, ${pixel.longitude.toFixed(4)}°`
-                : "N/A"
-        );
-
-        updateText(
-            "terrain-raster-index",
-            raster
-                ? `Row ${raster.row}, Column ${raster.column}`
-                : "N/A"
+            [
+                ["ELEVATION", `${formatNumber(terrain.elevation_metres, 1)} m`],
+                ["SLOPE", `${formatNumber(terrain.slope_degrees, 2)}°`],
+                ["HAZARD CLASS", terrain.hazard_class || "Unknown"]
+            ],
+            note
         );
 
         console.log("MARSWARD terrain inspection:", data);
@@ -311,12 +439,7 @@ async function inspectTerrain(lon, lat) {
     } catch (error) {
         console.error("Terrain inspection error:", error);
 
-        updateText(
-            "selected-region",
-            "Terrain inspection unavailable"
-        );
-
-        updateText(
+        renderCardMessage(
             "terrain-inspection",
             "Could not retrieve terrain information. Check the backend."
         );
@@ -324,15 +447,91 @@ async function inspectTerrain(lon, lat) {
 }
 
 // --------------------------------------------------
+// SCIENCE STOPS
+// --------------------------------------------------
+
+async function loadScienceStops() {
+    try {
+        const response = await fetch(`${API_BASE}/api/science/stops`);
+
+        if (!response.ok) {
+            throw new Error(`Science stops returned ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        stopsSource.clear();
+
+        data.stops.forEach(stop => {
+            stopsSource.addFeature(
+                new Feature({
+                    geometry: new Point([stop.longitude, stop.latitude]),
+                    name: stop.name,
+                    stop
+                })
+            );
+        });
+
+    } catch (error) {
+        console.error("Science stops error:", error);
+    }
+}
+
+function useStopAsDestination(stop) {
+    const lon = Number(stop.longitude);
+    const lat = Number(stop.latitude);
+
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+        return;
+    }
+
+    setPoint("end", lon, lat);
+    updateCoordinates(lon, lat);
+    inspectTerrain(lon, lat);
+
+    updateText(
+        "route-results",
+        `Destination set to ${stop.name}. Calculate the route for a GO / NO-GO verdict.`
+    );
+}
+
+// Sent by the Science Explorer view (modules.js).
+window.addEventListener("marsward:set-destination", (event) => {
+    if (event.detail) {
+        useStopAsDestination(event.detail);
+    }
+});
+
+// --------------------------------------------------
 // MAP CLICK EVENT
 // --------------------------------------------------
 
 map.on("click", function (event) {
+    // A click on a science stop makes it the destination.
+    const stopFeature = map.forEachFeatureAtPixel(
+        event.pixel,
+        feature => feature,
+        {
+            layerFilter: layer => layer === stopsLayer,
+            hitTolerance: 6
+        }
+    );
+
+    if (stopFeature) {
+        useStopAsDestination(stopFeature.get("stop"));
+        return;
+    }
+
     const [lon, lat] = event.coordinate;
 
-    addMarker(lon, lat);
+    setPoint(clickMode, lon, lat);
     updateCoordinates(lon, lat);
     inspectTerrain(lon, lat);
+
+    // After the start is placed, the next click sets the destination.
+    if (clickMode === "start") {
+        setClickMode("end");
+    }
 });
 
 // --------------------------------------------------
@@ -396,80 +595,37 @@ async function loadTerrainSummary() {
 
         const elevation = data.elevation;
         const slope = data.slope;
+        const categories = data.hazards.summary.categories;
 
-        const categories =
-            data.hazards.summary.categories;
-
-        // Elevation statistics
-
-        updateText(
-            "elevation-min",
-            `${formatNumber(elevation.minimum, 0)} m`
+        renderReadings(
+            "terrain-statistics",
+            [
+                ["ELEVATION RANGE", `${formatNumber(elevation.minimum, 0)} m to ${formatNumber(elevation.maximum, 0)} m`],
+                ["MEAN ELEVATION", `${formatNumber(elevation.mean, 1)} m`],
+                ["MEAN SLOPE", `${formatNumber(slope.mean, 2)}°`],
+                ["90TH PERCENTILE SLOPE", `${formatNumber(slope.percentile_90, 2)}°`],
+                ["MAXIMUM SLOPE", `${formatNumber(slope.maximum, 2)}°`],
+                ["GENTLE TERRAIN", `${formatNumber(categories.Gentle.percentage, 2)}%`],
+                ["MODERATE TERRAIN", `${formatNumber(categories.Moderate.percentage, 2)}%`],
+                ["STEEP TERRAIN", `${formatNumber(categories.Steep.percentage, 2)}%`],
+                ["VERY STEEP TERRAIN", `${formatNumber(categories["Very Steep"].percentage, 2)}%`]
+            ],
+            "Full breakdown in Science Explorer."
         );
 
-        updateText(
-            "elevation-max",
-            `${formatNumber(elevation.maximum, 0)} m`
-        );
-
-        updateText(
-            "elevation-mean",
-            `${formatNumber(elevation.mean, 1)} m`
-        );
-
-        updateText(
-            "elevation-median",
-            `${formatNumber(elevation.median, 0)} m`
-        );
-
-        // Slope statistics
-
-        updateText(
-            "slope-mean",
-            `${formatNumber(slope.mean, 2)}°`
-        );
-
-        updateText(
-            "slope-max",
-            `${formatNumber(slope.maximum, 2)}°`
-        );
-
-        updateText(
-            "slope-p90",
-            `${formatNumber(slope.percentile_90, 2)}°`
-        );
-
-        // Hazard percentages
-
-        updateText(
-            "hazard-gentle",
-            `${formatNumber(categories.Gentle.percentage, 2)}%`
-        );
-
-        updateText(
-            "hazard-moderate",
-            `${formatNumber(categories.Moderate.percentage, 2)}%`
-        );
-
-        updateText(
-            "hazard-steep",
-            `${formatNumber(categories.Steep.percentage, 2)}%`
-        );
-
-        updateText(
-            "hazard-very-steep",
-            `${formatNumber(categories["Very Steep"].percentage, 2)}%`
-        );
+        updateText("terrain-status", "TERRAIN DATA LOADED");
 
         console.log("MARSWARD terrain summary:", data);
 
     } catch (error) {
         console.error("Terrain summary error:", error);
 
-        updateText(
-            "terrain-summary-status",
-            "Terrain statistics unavailable"
+        renderCardMessage(
+            "terrain-statistics",
+            "Terrain statistics unavailable. Check the backend and the MOLA data file."
         );
+
+        updateText("terrain-status", "UNAVAILABLE");
     }
 }
 
@@ -477,26 +633,31 @@ async function loadTerrainSummary() {
 // RESET MAP
 // --------------------------------------------------
 
+function resetPoints() {
+    setPoint("start", DEFAULT_START[0], DEFAULT_START[1]);
+    setPoint("end", DEFAULT_END[0], DEFAULT_END[1]);
+    setClickMode("start");
+}
+
 const resetButton = element("reset-map");
 
 if (resetButton) {
     resetButton.addEventListener("click", () => {
         map.getView().animate({
             center: JEZERO,
-            zoom: 5,
+            zoom: DEFAULT_ZOOM,
             duration: 700
         });
 
-        markerSource.clear();
         routeSource.clear();
+        resetPoints();
 
-        updateCoordinates(JEZERO[0], JEZERO[1]);
-
-        inspectTerrain(JEZERO[0], JEZERO[1]);
+        updateCoordinates(DEFAULT_START[0], DEFAULT_START[1]);
+        inspectTerrain(DEFAULT_START[0], DEFAULT_START[1]);
 
         updateText(
-            "selected-region",
-            "Jezero Crater"
+            "route-results",
+            "Click the map or a science stop to set the start and destination, then calculate a route for a GO / NO-GO verdict."
         );
     });
 }
@@ -521,7 +682,7 @@ async function checkBackendHealth() {
 
         if (statusElement) {
             statusElement.textContent =
-                data.status === "success" || data.status === "ok"
+                ["online", "success", "ok"].includes(data.status)
                     ? "ONLINE"
                     : "CHECK STATUS";
         }
@@ -596,12 +757,134 @@ function convertRoutePoint(point) {
     return [lon, lat];
 }
 
-async function generateRoute() {
-    const startLon = Number(element("start-lon")?.value);
-    const startLat = Number(element("start-lat")?.value);
+// Travel mode presets fill the speed field.
+element("eva-mode")?.addEventListener("change", (event) => {
+    const speed = event.target.selectedOptions[0]?.dataset.speed;
 
-    const endLon = Number(element("end-lon")?.value);
-    const endLat = Number(element("end-lat")?.value);
+    if (speed && element("eva-speed")) {
+        element("eva-speed").value = speed;
+    }
+});
+
+function numberOrNull(id) {
+    const input = element(id);
+
+    if (!input || input.value.trim() === "") {
+        return null;
+    }
+
+    const value = Number(input.value);
+
+    return Number.isFinite(value) ? value : null;
+}
+
+function readEvaSettings() {
+    return {
+        travel_mode: element("eva-mode")?.value || "foot",
+        speed_kmh: numberOrNull("eva-speed"),
+        time_limit_hours: numberOrNull("eva-limit"),
+        time_at_site_hours: numberOrNull("eva-site"),
+        reserve_hours: numberOrNull("eva-reserve"),
+        max_slope_degrees: numberOrNull("eva-slope"),
+        dust_opacity: numberOrNull("eva-dust"),
+        air_temperature_c: numberOrNull("eva-temp"),
+        round_trip: element("eva-round-trip")?.checked ?? true
+    };
+}
+
+const VERDICT_STYLES = {
+    GO: { cssClass: "go", label: "GO", color: "#2ecc71" },
+    CAUTION: { cssClass: "caution", label: "CAUTION", color: "#f1c40f" },
+    NO_GO: { cssClass: "nogo", label: "NO-GO", color: "#e74c3c" }
+};
+
+function formatHours(hours) {
+    if (hours === null || hours === undefined || !Number.isFinite(Number(hours))) {
+        return "N/A";
+    }
+
+    const minutes = Math.round(Math.abs(hours) * 60);
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    const sign = hours < 0 ? "−" : "";
+
+    if (h && m) {
+        return `${sign}${h} h ${m} min`;
+    }
+
+    return h ? `${sign}${h} h` : `${sign}${m} min`;
+}
+
+function renderVerdict(verdict, route) {
+    const target = element("route-results");
+
+    if (!target || !verdict) {
+        return;
+    }
+
+    const style = VERDICT_STYLES[verdict.status] || VERDICT_STYLES.CAUTION;
+
+    // The headline starts with the status word; the badge shows it.
+    const headline = String(verdict.headline || "").replace(/^[A-Z-]+:\s*/, "");
+
+    // Skip the reason already shown as the headline.
+    const reasons = (verdict.reasons || [])
+        .filter(reason => reason.message !== headline)
+        .map(reason => `
+        <li class="${escapeHtml(reason.level)}">${escapeHtml(reason.message)}</li>
+    `).join("");
+
+    const stat = (label, value) =>
+        `<span class="route-stat">${label}: <strong>${escapeHtml(value)}</strong></span>`;
+
+    let stats = "";
+
+    if (verdict.timing && verdict.terrain) {
+        const timing = verdict.timing;
+        const terrain = verdict.terrain;
+
+        stats = `
+            <div class="route-stats">
+                ${stat("One way", `${formatNumber(terrain.one_way_distance_km, 1)} km`)}
+                ${stat("Total distance", `${formatNumber(terrain.total_distance_km, 1)} km`)}
+                ${stat("Out", formatHours(timing.outbound_hours))}
+                ${stat("Back", formatHours(timing.return_hours))}
+                ${stat("At destination", formatHours(timing.time_at_site_hours))}
+                ${stat("Total time", formatHours(timing.total_hours))}
+                ${stat("Spare", formatHours(timing.spare_hours))}
+                ${stat("Steepest slope", `${formatNumber(terrain.steepest_slope_degrees, 1)}°`)}
+                ${stat("Climb on the way out", `${formatNumber(terrain.ascent_m, 0)} m`)}
+                ${stat("Descent on the way out", `${formatNumber(terrain.descent_m, 0)} m`)}
+                ${route ? stat("Cells searched", route.visited_nodes ?? "N/A") : ""}
+            </div>
+        `;
+    }
+
+    const assumptions = (verdict.assumptions || []).length
+        ? `
+            <details class="verdict-assumptions">
+                <summary>Assumptions behind this verdict</summary>
+                <ul>${verdict.assumptions.map(text => `<li>${escapeHtml(text)}</li>`).join("")}</ul>
+            </details>
+        `
+        : "";
+
+    target.innerHTML = `
+        <div class="verdict ${style.cssClass}">
+            <span class="verdict-badge">${style.label}</span>
+            <div class="verdict-body">
+                <strong>${escapeHtml(headline)}</strong>
+                <ul class="verdict-reasons">${reasons}</ul>
+            </div>
+        </div>
+        ${stats}
+        ${assumptions}
+    `;
+}
+
+async function generateRoute() {
+    const [startLon, startLat] = readPoint("start");
+    const [endLon, endLat] = readPoint("end");
 
     const resultsElement = element("route-results");
 
@@ -625,14 +908,14 @@ async function generateRoute() {
     ) {
         if (resultsElement) {
             resultsElement.textContent =
-                "Both locations must be within the Jezero Crater analysis area (74°–81° E, 16°–21° N).";
+                `Both locations must be within the study area (${boundsText()}).`;
         }
 
         return;
     }
 
     if (resultsElement) {
-        resultsElement.textContent = "Calculating optimal route...";
+        resultsElement.textContent = "Calculating route and verdict...";
     }
 
     const routeButton = element("generate-route");
@@ -651,24 +934,40 @@ async function generateRoute() {
                 },
                 body: JSON.stringify({
                     start: [startLon, startLat],
-                    destination: [endLon, endLat]
+                    destination: [endLon, endLat],
+                    eva: readEvaSettings()
                 })
             }
         );
 
+        let data = null;
+
+        try {
+            data = await response.json();
+        } catch (parseError) {
+            data = null;
+        }
+
         if (!response.ok) {
-            throw new Error(`Route API returned ${response.status}`);
+            throw new Error(
+                (data && data.error) || `Route API returned ${response.status}`
+            );
         }
 
-        const data = await response.json();
+        routeSource.clear();
 
-        if (data.status === "error") {
-            throw new Error(data.message || "Route generation failed.");
+        drawPoint("start", startLon, startLat);
+        drawPoint("end", endLon, endLat);
+
+        // No route within the slope limit: the verdict is NO-GO.
+        if (data.status === "no_route") {
+            renderVerdict(data.verdict, null);
+            return;
         }
 
-        const route = data.route || data;
+        const route = data.route;
 
-        if (!route.path || route.path.length === 0) {
+        if (!route || !route.path || route.path.length === 0) {
             throw new Error("The route planner did not return a valid path.");
         }
 
@@ -680,45 +979,27 @@ async function generateRoute() {
             throw new Error("Could not convert the returned route coordinates.");
         }
 
-        routeSource.clear();
-        markerSource.clear();
+        // Join the route to the exact start and destination, since
+        // the path itself runs between MOLA pixel centres.
+        routeCoordinates.unshift([startLon, startLat]);
+        routeCoordinates.push([endLon, endLat]);
+
+        const verdictStyle = VERDICT_STYLES[data.verdict?.status];
 
         const routeFeature = new Feature({
-            geometry: new LineString(routeCoordinates)
+            geometry: new LineString(routeCoordinates),
+            color: verdictStyle ? verdictStyle.color : "#ff9f43"
         });
 
         routeSource.addFeature(routeFeature);
 
-        // Add start and destination markers.
-
-        markerSource.addFeature(
-            new Feature({
-                geometry: new Point([startLon, startLat])
-            })
-        );
-
-        markerSource.addFeature(
-            new Feature({
-                geometry: new Point([endLon, endLat])
-            })
-        );
-
         map.getView().fit(routeFeature.getGeometry(), {
-            padding: [60, 60, 60, 60],
+            padding: [70, 70, 70, 70],
             duration: 700,
-            maxZoom: 7
+            maxZoom: 11
         });
 
-        if (resultsElement) {
-            resultsElement.innerHTML = `
-                <strong>Route generated successfully</strong>
-                <p>Distance: ${formatNumber(route.distance_grid_units, 2)} grid units</p>
-                <p>Terrain cost: ${formatNumber(route.terrain_cost, 2)}</p>
-                <p>Visited nodes: ${route.visited_nodes ?? "N/A"}</p>
-                <p>Algorithm: ${route.model || "A*"}</p>
-                <p>Grid size: ${route.grid_size || "40 × 40"}</p>
-            `;
-        }
+        renderVerdict(data.verdict, route);
 
         console.log("MARSWARD route result:", data);
 
@@ -744,15 +1025,40 @@ if (routeButton) {
 }
 
 // --------------------------------------------------
+// VIEW SWITCHING (events sent by modules.js)
+// --------------------------------------------------
+
+window.addEventListener("marsward:view", (event) => {
+    const { view, mode } = event.detail || {};
+
+    if (view !== "map") {
+        return;
+    }
+
+    // The map was hidden, so its size must be recalculated.
+    map.updateSize();
+
+    if (mode === "route") {
+        element("start-lon")?.focus();
+    }
+
+    if (mode === "hazard" && hazardToggle && !hazardToggle.checked) {
+        hazardToggle.checked = true;
+        updateHazardLayerVisibility(true);
+    }
+});
+
+// --------------------------------------------------
 // INITIALIZE DASHBOARD
 // --------------------------------------------------
 
-updateCoordinates(JEZERO[0], JEZERO[1]);
+resetPoints();
 
-addMarker(JEZERO[0], JEZERO[1]);
+updateCoordinates(DEFAULT_START[0], DEFAULT_START[1]);
 
 checkBackendHealth();
 loadTerrainSummary();
-inspectTerrain(JEZERO[0], JEZERO[1]);
+loadScienceStops();
+inspectTerrain(DEFAULT_START[0], DEFAULT_START[1]);
 
 console.log("MARSWARD mission-control frontend initialized.");

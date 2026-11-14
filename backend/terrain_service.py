@@ -1,4 +1,3 @@
-
 import struct
 import zlib
 import binascii
@@ -81,9 +80,10 @@ def get_terrain_summary():
 
     return {
         "status": "success",
-        "source": "NASA MOLA MEGDR",
+        "source": region["dataset"]["name"],
         "region": {
-            "name": "Jezero Crater",
+            "name": region["name"],
+            "pixels_per_degree": region["pixels_per_degree"],
             "bounds": bounds,
             "raster_rows": int(region["elevation"].shape[0]),
             "raster_columns": int(region["elevation"].shape[1])
@@ -133,7 +133,7 @@ def inspect_terrain(longitude, latitude):
         and bounds["south"] <= latitude <= bounds["north"]
     ):
         raise ValueError(
-            "Selected coordinates are outside the Jezero analysis region."
+            "Selected coordinates are outside the study region."
         )
 
     # Find the nearest pixel centre.

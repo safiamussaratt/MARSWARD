@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -38,11 +37,11 @@
         <aside class="sidebar">
             <p class="section-label">NAVIGATION</p>
 
-            <div class="nav-item active">◉ Martian Explorer</div>
-            <div class="nav-item">⌖ Route Planner</div>
-            <div class="nav-item">⚠ Hazard Analysis</div>
-            <div class="nav-item">♧ Survival Simulator</div>
-            <div class="nav-item">✧ Science Explorer</div>
+            <button type="button" class="nav-item active" data-view="map" data-mode="explorer">◉ Martian Explorer</button>
+            <button type="button" class="nav-item" data-view="map" data-mode="route">⌖ Route Planner</button>
+            <button type="button" class="nav-item" data-view="map" data-mode="hazard">⚠ Hazard Analysis</button>
+            <button type="button" class="nav-item" data-view="survival">♧ Survival Simulator</button>
+            <button type="button" class="nav-item" data-view="science">✧ Science Explorer</button>
 
             <div class="sidebar-divider"></div>
 
@@ -88,39 +87,49 @@
             </button>
         </aside>
 
-        <section class="map-section">
+        <!-- ================= MAP VIEW ================= -->
+
+        <section class="map-section" id="view-map">
 
             <div class="map-heading">
                 <div>
                     <h3>Martian Surface Explorer</h3>
                     <p>Explore NASA planetary terrain data</p>
                 </div>
-                <span class="data-tag">NASA / MOLA</span>
+                <span class="data-tag" id="dataset-tag">NASA / MOLA</span>
             </div>
 
             <div class="route-controls">
                 <div class="coordinate-input">
+                    <label>MAP CLICK SETS</label>
+                    <div class="segmented" role="group" aria-label="Map click sets">
+                        <button type="button" id="click-start" class="active">Start</button>
+                        <button type="button" id="click-end">Destination</button>
+                    </div>
+                </div>
+
+                <div class="coordinate-input">
                     <label for="start-lon">START LONGITUDE</label>
                     <input id="start-lon" type="number"
-                           step="0.0001" value="77.2">
+                           step="0.0001" value="77.4508">
                 </div>
 
                 <div class="coordinate-input">
                     <label for="start-lat">START LATITUDE</label>
                     <input id="start-lat" type="number"
-                           step="0.0001" value="18.2">
+                           step="0.0001" value="18.4447">
                 </div>
 
                 <div class="coordinate-input">
                     <label for="end-lon">DESTINATION LONGITUDE</label>
                     <input id="end-lon" type="number"
-                           step="0.0001" value="78.3">
+                           step="0.0001" value="77.4">
                 </div>
 
                 <div class="coordinate-input">
                     <label for="end-lat">DESTINATION LATITUDE</label>
                     <input id="end-lat" type="number"
-                           step="0.0001" value="18.8">
+                           step="0.0001" value="18.455">
                 </div>
 
                 <button id="generate-route">
@@ -128,8 +137,58 @@
                 </button>
             </div>
 
+            <div class="route-controls eva-controls">
+                <div class="coordinate-input">
+                    <label for="eva-mode">TRAVEL MODE</label>
+                    <select id="eva-mode">
+                        <option value="foot" data-speed="3">On foot</option>
+                        <option value="rover" data-speed="10">Crew rover</option>
+                    </select>
+                </div>
+
+                <div class="coordinate-input narrow">
+                    <label for="eva-speed">SPEED (KM/H)</label>
+                    <input id="eva-speed" type="number" min="0.1" step="0.1" value="3">
+                </div>
+
+                <div class="coordinate-input narrow">
+                    <label for="eva-limit">TIME LIMIT (H)</label>
+                    <input id="eva-limit" type="number" min="0.5" step="0.5" value="8">
+                </div>
+
+                <div class="coordinate-input narrow">
+                    <label for="eva-site">AT DESTINATION (H)</label>
+                    <input id="eva-site" type="number" min="0" step="0.25" value="1">
+                </div>
+
+                <div class="coordinate-input narrow">
+                    <label for="eva-reserve">TIME RESERVE (H)</label>
+                    <input id="eva-reserve" type="number" min="0" step="0.25" value="1">
+                </div>
+
+                <div class="coordinate-input narrow">
+                    <label for="eva-slope">SLOPE LIMIT (°)</label>
+                    <input id="eva-slope" type="number" min="1" max="90" step="1" value="20">
+                </div>
+
+                <div class="coordinate-input narrow">
+                    <label for="eva-dust">DUST OPACITY</label>
+                    <input id="eva-dust" type="number" min="0" step="0.1" value="0.4">
+                </div>
+
+                <div class="coordinate-input narrow">
+                    <label for="eva-temp">AIR TEMP (°C)</label>
+                    <input id="eva-temp" type="number" step="1" value="-55">
+                </div>
+
+                <label class="inline-check">
+                    <input id="eva-round-trip" type="checkbox" checked>
+                    Round trip
+                </label>
+            </div>
+
             <div id="route-results">
-                Enter your coordinates and calculate a route.
+                Click the map or a science stop to set the start and destination, then calculate a route for a GO / NO-GO verdict.
             </div>
 
             <div id="map"></div>
@@ -137,6 +196,116 @@
             <div class="map-footer">
                 <span>DATA SOURCE: NASA MARS TREK</span>
                 <span id="map-coordinates">LAT: -- | LON: --</span>
+            </div>
+        </section>
+
+        <!-- ============== SURVIVAL SIMULATOR ============== -->
+
+        <section class="module-view" id="view-survival" hidden>
+
+            <div class="map-heading">
+                <div>
+                    <h3>Survival Simulator</h3>
+                    <p>Estimate crew consumables for a Jezero surface mission</p>
+                </div>
+                <span class="data-tag">LIFE SUPPORT MODEL</span>
+            </div>
+
+            <div class="survival-layout">
+
+                <form id="survival-form" class="module-card" novalidate>
+
+                    <p class="section-label">MISSION</p>
+
+                    <div class="field-grid">
+                        <div class="field">
+                            <label for="sv-crew">CREW SIZE</label>
+                            <input id="sv-crew" type="number" min="1" max="100" step="1">
+                        </div>
+                        <div class="field">
+                            <label for="sv-duration">DURATION (SOLS)</label>
+                            <input id="sv-duration" type="number" min="1" max="2000" step="1">
+                        </div>
+                    </div>
+
+                    <p class="section-label">DAILY REQUIREMENT · KG PER PERSON</p>
+
+                    <div class="field-grid three">
+                        <div class="field">
+                            <label for="sv-water">WATER</label>
+                            <input id="sv-water" type="number" min="0.01" step="0.01">
+                        </div>
+                        <div class="field">
+                            <label for="sv-food">FOOD</label>
+                            <input id="sv-food" type="number" min="0.01" step="0.01">
+                        </div>
+                        <div class="field">
+                            <label for="sv-oxygen">OXYGEN</label>
+                            <input id="sv-oxygen" type="number" min="0.01" step="0.01">
+                        </div>
+                    </div>
+
+                    <p class="section-label">EMERGENCY RESERVE</p>
+
+                    <div class="field-grid">
+                        <div class="field">
+                            <label for="sv-reserve">RESERVE (% OF MISSION NEED)</label>
+                            <input id="sv-reserve" type="number" min="0" max="100" step="1">
+                        </div>
+                    </div>
+
+                    <p class="section-label">SUPPLIES ON BOARD · KG</p>
+
+                    <div class="field-grid three">
+                        <div class="field">
+                            <label for="sv-supply-water">WATER</label>
+                            <input id="sv-supply-water" type="number" min="0" step="1">
+                        </div>
+                        <div class="field">
+                            <label for="sv-supply-food">FOOD</label>
+                            <input id="sv-supply-food" type="number" min="0" step="1">
+                        </div>
+                        <div class="field">
+                            <label for="sv-supply-oxygen">OXYGEN</label>
+                            <input id="sv-supply-oxygen" type="number" min="0" step="1">
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" id="sv-run" class="primary-button">
+                            Run Simulation
+                        </button>
+                        <button type="button" id="sv-reset" class="secondary-button inline">
+                            Reset Defaults
+                        </button>
+                    </div>
+                </form>
+
+                <div id="survival-results" class="survival-results">
+                    <div class="module-card">
+                        <p class="module-placeholder">Loading simulator...</p>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ============== SCIENCE EXPLORER ============== -->
+
+        <section class="module-view" id="view-science" hidden>
+
+            <div class="map-heading">
+                <div>
+                    <h3>Science Explorer</h3>
+                    <p>Mars, Jezero Crater and the NASA MOLA terrain data behind this dashboard</p>
+                </div>
+                <span class="data-tag">NASA / MOLA MEGDR</span>
+            </div>
+
+            <div id="science-content">
+                <div class="module-card">
+                    <p class="module-placeholder">Loading science data...</p>
+                </div>
             </div>
         </section>
 
@@ -228,6 +397,9 @@
 
 </div>
 
+<!-- modules.js has no map dependency, so navigation, the Survival
+     Simulator and the Science Explorer work even if map tiles fail. -->
+<script type="module" src="/modules.js"></script>
 <script type="module" src="/script.js"></script>
 </body>
 </html>
