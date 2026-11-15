@@ -204,7 +204,7 @@ const blockedLayer = new ImageLayer({
 // ROUTE, SCIENCE STOP AND MARKER LAYERS
 // --------------------------------------------------
 
-const LABEL_FONT = "bold 10px 'Segoe UI', Arial, sans-serif";
+const LABEL_FONT = "600 11px 'Chakra Petch', 'Segoe UI', Arial, sans-serif";
 
 function labelText(text, color, offsetY) {
     return new Text({
@@ -212,7 +212,7 @@ function labelText(text, color, offsetY) {
         offsetY,
         font: LABEL_FONT,
         fill: new Fill({ color }),
-        stroke: new Stroke({ color: "#101214", width: 3 })
+        stroke: new Stroke({ color: "#04060b", width: 4 })
     });
 }
 
@@ -221,12 +221,26 @@ const routeSource = new VectorSource();
 const routeLayer = new VectorLayer({
     source: routeSource,
     zIndex: 3,
-    style: (feature) => new Style({
-        stroke: new Stroke({
-            color: feature.get("color") || "#ff9f43",
-            width: 3
-        })
-    })
+    style: (feature) => {
+        const color = feature.get("color") || "#ff9f43";
+
+        // Soft glow underneath, bright dashed core on top.
+        return [
+            new Style({
+                stroke: new Stroke({ color: color + "40", width: 11 })
+            }),
+            new Style({
+                stroke: new Stroke({ color: "#04060b", width: 5 })
+            }),
+            new Style({
+                stroke: new Stroke({
+                    color,
+                    width: 3,
+                    lineDash: [10, 6]
+                })
+            })
+        ];
+    }
 });
 
 // Named science stops (yellow diamonds). Click one to make it
@@ -242,18 +256,18 @@ const stopsLayer = new VectorLayer({
         image: new RegularShape({
             points: 4,
             radius: 7,
-            fill: new Fill({ color: "#f5d76e" }),
-            stroke: new Stroke({ color: "#101214", width: 2 })
+            fill: new Fill({ color: "#ffd23f" }),
+            stroke: new Stroke({ color: "#04060b", width: 2 })
         }),
-        text: labelText(feature.get("name"), "#f5d76e", 16)
+        text: labelText(feature.get("name"), "#ffd23f", 18)
     })
 });
 
 // Start (orange) and destination (blue) markers.
 
 const POINT_STYLES = {
-    start: { color: "#ff6b35", label: "START" },
-    end: { color: "#4fc3f7", label: "DESTINATION" }
+    start: { color: "#ff6a3d", label: "START" },
+    end: { color: "#4de3ff", label: "DESTINATION" }
 };
 
 const markerSource = new VectorSource();
@@ -264,14 +278,27 @@ const markerLayer = new VectorLayer({
     style: (feature) => {
         const config = POINT_STYLES[feature.get("role")] || POINT_STYLES.start;
 
-        return new Style({
-            image: new CircleStyle({
-                radius: 7,
-                fill: new Fill({ color: config.color }),
-                stroke: new Stroke({ color: "#ffffff", width: 2 })
+        // Target-lock look: outer ring, solid core.
+        return [
+            new Style({
+                image: new CircleStyle({
+                    radius: 13,
+                    stroke: new Stroke({
+                        color: config.color,
+                        width: 1.5,
+                        lineDash: [4, 4]
+                    })
+                })
             }),
-            text: labelText(config.label, "#ffffff", -16)
-        });
+            new Style({
+                image: new CircleStyle({
+                    radius: 6,
+                    fill: new Fill({ color: config.color }),
+                    stroke: new Stroke({ color: "#ffffff", width: 2 })
+                }),
+                text: labelText(config.label, "#ffffff", -24)
+            })
+        ];
     }
 });
 
@@ -969,9 +996,9 @@ function readEvaSettings() {
 }
 
 const VERDICT_STYLES = {
-    GO: { cssClass: "go", label: "GO", color: "#2ecc71" },
-    CAUTION: { cssClass: "caution", label: "CAUTION", color: "#f1c40f" },
-    NO_GO: { cssClass: "nogo", label: "NO-GO", color: "#e74c3c" }
+    GO: { cssClass: "go", label: "GO", color: "#3dffa0" },
+    CAUTION: { cssClass: "caution", label: "CAUTION", color: "#ffd23f" },
+    NO_GO: { cssClass: "nogo", label: "NO-GO", color: "#ff4d5e" }
 };
 
 function formatHours(hours) {

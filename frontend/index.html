@@ -5,12 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MARSWARD | Mission Control</title>
 
+    <meta name="theme-color" content="#04060b">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/ol@10.6.1/ol.css">
     <link rel="stylesheet" href="/style.css">
 </head>
 
 <body>
+
+<!-- Boot sequence: plays once on load, removed by hud.js -->
+<div class="boot" id="boot" aria-hidden="true">
+    <div class="boot-inner">
+        <div class="boot-ring"><div class="boot-sweep"></div></div>
+        <div class="boot-title">MARSWARD</div>
+        <div class="boot-lines">
+            <p>Opening uplink to Jezero relay <span>OK</span></p>
+            <p>Loading MOLA elevation grid <span>OK</span></p>
+            <p>Computing slope and hazard classes <span>OK</span></p>
+            <p>Calibrating route planner <span>OK</span></p>
+            <p>Mission control online <span>READY</span></p>
+        </div>
+        <div class="boot-bar"><i></i></div>
+    </div>
+</div>
+
 <div class="app-container">
 
     <header class="topbar">
@@ -27,8 +51,14 @@
             MISSION CONTROL ONLINE
         </div>
 
-        <div class="mission-name">
-            MISSION: JEZERO EXPLORATION
+        <div class="topbar-right">
+            <div class="mission-name">
+                MISSION: JEZERO EXPLORATION
+            </div>
+            <div class="clock" aria-label="Clock">
+                <b id="clock-utc">--:--:--</b>
+                <span id="clock-session">SESSION T+00:00:00</span>
+            </div>
         </div>
     </header>
 
@@ -37,11 +67,11 @@
         <aside class="sidebar">
             <p class="section-label">NAVIGATION</p>
 
-            <button type="button" class="nav-item active" data-view="map" data-mode="explorer">◉ Martian Explorer</button>
-            <button type="button" class="nav-item" data-view="map" data-mode="route">⌖ Route Planner</button>
-            <button type="button" class="nav-item" data-view="map" data-mode="hazard">⚠ Hazard Analysis</button>
-            <button type="button" class="nav-item" data-view="survival">♧ Survival Simulator</button>
-            <button type="button" class="nav-item" data-view="science">✧ Science Explorer</button>
+            <button type="button" class="nav-item active" data-view="map" data-mode="explorer"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></svg><span>Martian Explorer</span><kbd>1</kbd></button>
+            <button type="button" class="nav-item" data-view="map" data-mode="route"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.5"/></svg><span>Route Planner</span><kbd>2</kbd></button>
+            <button type="button" class="nav-item" data-view="map" data-mode="hazard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v5M12 17.5v.5"/></svg><span>Hazard Analysis</span><kbd>3</kbd></button>
+            <button type="button" class="nav-item" data-view="survival"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.5-7-11a7 7 0 0 1 14 0c0 6.500-7 11-7 11Z"/><path d="M8.500 10H11l1.500-3 1.500 6 1-3h1"/></svg><span>Survival Simulator</span><kbd>4</kbd></button>
+            <button type="button" class="nav-item" data-view="science"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2"/><ellipse cx="12" cy="12" rx="10" ry="4.500"/><ellipse cx="12" cy="12" rx="10" ry="4.500" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.500" transform="rotate(120 12 12)"/></svg><span>Science Explorer</span><kbd>5</kbd></button>
 
             <div class="sidebar-divider"></div>
 
@@ -215,7 +245,17 @@
                 Click the map or a science stop to set the start and destination, then calculate a route for a GO / NO-GO verdict.
             </div>
 
-            <div id="map"></div>
+            <div class="map-frame" id="map-frame">
+                <div id="map"></div>
+                <div class="map-glass"></div>
+                <div class="map-scan"></div>
+                <div class="map-sweep"></div>
+                <span class="map-corner tl"></span>
+                <span class="map-corner tr"></span>
+                <span class="map-corner bl"></span>
+                <span class="map-corner br"></span>
+                <div class="map-tag"><i></i>LIVE SURFACE FEED · JEZERO</div>
+            </div>
 
             <div class="map-footer">
                 <span>DATA SOURCE: NASA MARS TREK</span>
@@ -423,6 +463,7 @@
 
 <!-- modules.js has no map dependency, so navigation, the Survival
      Simulator and the Science Explorer work even if map tiles fail. -->
+<script src="/hud.js" defer></script>
 <script type="module" src="/modules.js"></script>
 <script type="module" src="/script.js"></script>
 </body>
